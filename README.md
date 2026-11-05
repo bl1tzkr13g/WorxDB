@@ -33,7 +33,7 @@ Visit **http://YOUR-DOCKER-SERVER-IP:8080**. Sign in as `admin` (or your `APP_US
 
 Compose creates persistent `database` and `imports` volumes. `docker compose down` preserves them; **`docker compose down -v` deletes them**.
 
-For Portainer, use a repository-backed stack or clone the repository and run Compose from its directory. This Compose file builds a local image; pasting the YAML alone into a web stack editor does not provide the source/build context. An image publishing workflow can be added for simpler Portainer deployment.
+For Portainer, use the dedicated [Stack installer](PORTAINER.md). It deploys the repository directly, builds the app automatically, and opens WorxDB on port **8097** by default.
 
 ## Import a Works database
 

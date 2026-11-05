@@ -23,12 +23,14 @@ jobs:
       DB_PASSWORD: ci-ephemeral-db-password
       DB_ROOT_PASSWORD: ci-ephemeral-root-password
       APP_BIND: 127.0.0.1
+      APP_PORT: 8080
     steps:
       - uses: actions/checkout@v4
-      - run: docker compose up --build -d
-      - run: docker compose exec -T app wks2csv -v
+      - run: docker compose -f portainer-stack.yml config --quiet
+      - run: docker compose -f portainer-stack.yml up --build -d
+      - run: docker compose -f portainer-stack.yml exec -T app wks2csv -v
       - run: python scripts/docker_smoke.py
       - if: failure()
-        run: docker compose logs --no-color
+        run: docker compose -f portainer-stack.yml logs --no-color
       - if: always()
-        run: docker compose down -v
+        run: docker compose -f portainer-stack.yml down -v

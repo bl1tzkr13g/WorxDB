@@ -1,0 +1,40 @@
+# Portainer: deploy from Git repository, Compose path portainer-stack.yml.
+# Docker Standalone / Compose only; Docker Swarm does not build images.
+services:
+  app:
+    build: .
+    ports:
+      - "${APP_BIND:-0.0.0.0}:${APP_PORT:-8097}:8080"
+    environment:
+      DB_HOST: db
+      DB_NAME: worxdb
+      DB_USER: worxdb
+      DB_PASSWORD: ${DB_PASSWORD:?Add DB_PASSWORD in Portainer environment variables}
+      APP_USER: ${APP_USER:-admin}
+      APP_PASSWORD: ${APP_PASSWORD:?Add APP_PASSWORD in Portainer environment variables}
+      SECRET_KEY: ${SECRET_KEY:?Add SECRET_KEY in Portainer environment variables}
+      DATA_DIR: /data
+    volumes:
+      - imports:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+  db:
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: worxdb
+      MARIADB_USER: worxdb
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Add DB_PASSWORD in Portainer environment variables}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Add DB_ROOT_PASSWORD in Portainer environment variables}
+    volumes:
+      - database:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+volumes:
+  database:
+  imports:
