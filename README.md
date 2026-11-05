@@ -1,1 +1,96 @@
 # WorxDB
+
+A self-hosted, browser-based database workspace inspired by Microsoft Works Database. Docker runs the app and MariaDB together. This is an initial implementation, not a complete Works clone.
+
+## Included
+
+- Multiple named databases, each stored as a real typed MariaDB table.
+- Supported Microsoft Works `.wdb` conversion through libwps `wks2csv`, plus CSV/TSV imports.
+- Two-step import: review headings, sample records, row counts and field types before committing.
+- Original uploads preserved in a persistent volume with SHA-256 provenance recorded on the database.
+- Text, number, currency, date and yes/no fields. Text is the default for imports to preserve leading zeroes and original values.
+- Record tables, record editing forms, search, filters, numeric/date sorting and pagination.
+- Arithmetic calculated fields using earlier field IDs, e.g. `f2 * f3`.
+- Saved reports with selected columns, grouping, counts, numeric subtotals, grand totals, optional filters, summary view and landscape printing.
+- Browser printing / Save as PDF and CSV export.
+- Password-protected workspace, CSRF checks and record revision checks to prevent overwriting another editor's changes.
+
+## Install with Docker Compose
+
+On your Docker VM:
+
+```bash
+git clone https://github.com/bl1tzkr13g/WorxDB.git
+cd WorxDB
+cp .env.example .env
+nano .env
+docker compose up -d --build
+```
+
+Because the repository is private, cloning requires your GitHub account's existing authentication. Set all four password/secret values in `.env` to distinct random values. A session secret can be generated with `openssl rand -hex 32`. The app password is the password you use in the browser.
+
+Visit **http://YOUR-DOCKER-SERVER-IP:8080**. Sign in as `admin` (or your `APP_USER`) with `APP_PASSWORD`. For access outside a trusted local network, put it behind an HTTPS reverse proxy. MariaDB is only available on the internal Compose network.
+
+Compose creates persistent `database` and `imports` volumes. `docker compose down` preserves them; **`docker compose down -v` deletes them**.
+
+For Portainer, use a repository-backed stack or clone the repository and run Compose from its directory. This Compose file builds a local image; pasting the YAML alone into a web stack editor does not provide the source/build context. An image publishing workflow can be added for simpler Portainer deployment.
+
+## Import a Works database
+
+1. Keep your original file and make a backup.
+2. Choose **Import from Works**, select `.wdb`, `.csv` or `.tsv`, and review the conversion.
+3. Confirm that the first row contains column names. If it does not, export a CSV from Works including headings and use that file.
+4. Give the database a name. Keep account numbers, phone numbers and ZIP codes as **text**. Choose numeric/date types only when all records use the expected format.
+5. Select **Import into MariaDB**. Invalid values stop the whole import; no records are silently skipped.
+6. Compare field values and the total record count against Works. Rebuild saved report layouts under **Reports**.
+
+Dates must be ISO `YYYY-MM-DD`. Numbers use a decimal point and no grouping separators or currency symbols. Currency stores two decimal places; number stores six. Blank imported fields become NULL. Wholly blank rows are skipped. Headers are required and must be unique. Limits: 20 MB uploads, 40 MB converted output, 100,000 records, 80 fields.
+
+### WDB compatibility and report migration
+
+libwps documents database support for Works **v1–v2000**, and says it may retrieve the main database contents but **not filters, frames or reports**. Later Works versions are not guaranteed. Source: https://sourceforge.net/p/libwps/wiki/Home/#recognized-formats
+
+Conversion runs on your own server. If the converter rejects your file, open it in Microsoft Works and export CSV. CSV imports do not preserve Works calculated formulas or layout definitions. WorxDB arithmetic fields and reports must be recreated. Keep source formulas and reports separately for comparison. A newly created synthetic `.wdb` containing invented records can help test compatibility. Field definitions and blank or synthetic report examples are enough to guide the build; do not upload the live database. See [the privacy-safe handoff guide](PRIVACY-SAFE-HANDOFF.md).
+
+## Current limits
+
+- One shared administrator account; no individual users, roles or audit trail yet.
+- Database schemas are fixed after creation; export/reimport to change fields. No visual form designer, relationships or joins yet.
+- Reports can be created and printed; editing/deleting saved report definitions is not yet exposed.
+- Formulas support basic arithmetic only, not the full Works formula language. They are computed on read, not stored as generated MariaDB columns.
+- Report layout is a tabular/grouped template. Exact Works layouts, mailing labels, mail merge, embedded images, charts, scripts and macros are not implemented.
+- Search, filtering and sorting currently load the selected database into app memory. This version targets small Works-sized datasets, not large SQL administration workloads.
+- CSV export prefixes potentially executable spreadsheet strings with an apostrophe for safer opening in Excel/Calc. Use a MariaDB dump for a faithful database backup.
+- Failed/abandoned import uploads remain in the imports volume. Manage retention on the host; there is no upload cleanup UI yet.
+- No general-purpose SQL console or management of arbitrary existing MariaDB schemas. WorxDB manages databases created/imported through its workspace.
+
+## Backups and updates
+
+Back up both the MariaDB database and original uploads. This produces a dump without exposing the password in your terminal command:
+
+```bash
+docker compose exec -T db sh -c 'exec mariadb-dump -u root -p"$MARIADB_ROOT_PASSWORD" --single-transaction worxdb' > worxdb-backup.sql
+```
+
+Also back up the Compose imports volume with your normal Docker volume backup system. Keep `.env` securely. Test restoring backups before relying on them.
+
+To update:
+
+```bash
+git pull --ff-only
+docker compose up -d --build
+```
+
+## Verification
+
+```bash
+pip install -r requirements.txt
+python -m unittest discover -s tests -v
+node --check static/app.js
+```
+
+The unit suite runs against SQLite and covers record operations, imports, validation, typed sorting/filtering, formulas, concurrency checks, report rendering and escaping, authentication and CSRF. WDB unit tests mock the converter; they do **not** prove real-file compatibility.
+
+GitHub Actions also builds the Docker image and exercises record operations, calculations, reports and exports against **real MariaDB** using `scripts/docker_smoke.py`. This is separate from validating your actual WDB file. See the Actions run for the current Docker integration result.
+
+This project is independent software and is not affiliated with Microsoft.

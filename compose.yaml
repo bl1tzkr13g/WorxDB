@@ -1,0 +1,38 @@
+services:
+  app:
+    build: .
+    ports:
+      - "${APP_BIND:-0.0.0.0}:8080:8080"
+    environment:
+      DB_HOST: db
+      DB_NAME: worxdb
+      DB_USER: worxdb
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      APP_USER: ${APP_USER:-admin}
+      APP_PASSWORD: ${APP_PASSWORD:?Set APP_PASSWORD in .env}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+      DATA_DIR: /data
+    volumes:
+      - imports:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+  db:
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: worxdb
+      MARIADB_USER: worxdb
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD in .env}
+    volumes:
+      - database:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+volumes:
+  database:
+  imports:
