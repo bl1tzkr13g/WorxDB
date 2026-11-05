@@ -37,4 +37,10 @@ assert '375.00' in call('/report/'+report['id'])
 assert 'Sample customer' in call(f'/api/collections/{cid}/export.csv')
 call(f'/api/collections/{cid}/records/{rid}?revision=2','DELETE')
 assert call(f'/api/collections/{cid}/records')['total']==0
-print('Docker + MariaDB smoke test passed: create, calculate, update, report, export, delete.')
+call(f'/api/collections/{cid}/preferences','PUT',{'fields':{'f1':{'width':180,'bold':True}},'formOrder':['f2','f1','f3','f4']})
+assert call(f'/api/collections/{cid}/preferences')['fields']['f1']['width']==180
+call(f'/api/collections/{cid}/fields/f1','PUT',{'label':'Client'})
+call('/api/reports/'+report['id'],'PUT',{'name':'Renamed smoke report'})
+assert 'Renamed smoke report' in call('/report/'+report['id'])
+call('/api/reports/'+report['id'],'DELETE')
+print('Docker + MariaDB smoke test passed: CRUD, calculations, reports, exports and classic workspace settings.')

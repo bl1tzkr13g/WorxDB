@@ -30,6 +30,7 @@ engine = create_engine(url, pool_pre_ping=True)
 meta = MetaData()
 collections = Table('wb_collections', meta, Column('id', String(32), primary_key=True), Column('name', String(120), nullable=False), Column('fields', Text, nullable=False), Column('source', Text), Column('created', String(32)))
 reports = Table('wb_reports', meta, Column('id', String(32), primary_key=True), Column('collection_id', String(32), nullable=False), Column('name', String(120), nullable=False), Column('config', Text, nullable=False))
+preferences = Table('wb_preferences', meta, Column('collection_id', String(32), primary_key=True), Column('config', Text, nullable=False))
 TYPES = {'text': Text, 'number': Numeric(24, 6), 'currency': Numeric(24, 2), 'date': Date, 'boolean': Integer}
 
 @app.before_request
@@ -357,6 +358,75 @@ def show_report(rid):
     groups=[dict(name=k,rows=v,total=str(sum((Decimal(str(x.get(sumkey) or 0)) for x in v),Decimal(0))) if sumkey else None) for k,v in grouped.items()]
     total=str(sum((Decimal(str(x.get(sumkey) or 0)) for x in rows),Decimal(0))) if sumkey else None
     return render_template('report.html',title=r['name'],database=s['name'],fields=fields,groups=groups,total=total,count=len(rows),config=config,today=date.today().isoformat())
+
+@app.get('/api/collections/<cid>/preferences')
+def get_preferences(cid):
+    spec(cid)
+    with engine.connect() as conn:
+        value = conn.scalar(select(preferences.c.config).where(preferences.c.collection_id==cid))
+    return jsonify(json.loads(value) if value else {})
+
+@app.put('/api/collections/<cid>/preferences')
+def put_preferences(cid):
+    spec(cid)
+    config = request.get_json()
+    if not isinstance(config, dict) or len(json.dumps(config)) > 250000:
+        raise ValueError('Workspace settings are too large')
+    with engine.begin() as conn:
+        exists = conn.scalar(select(preferences.c.collection_id).where(preferences.c.collection_id==cid))
+        if exists:
+            conn.execute(update(preferences).where(preferences.c.collection_id==cid).values(config=json.dumps(config)))
+        else:
+            conn.execute(insert(preferences).values(collection_id=cid, config=json.dumps(config)))
+    return jsonify(ok=True)
+
+@app.post('/api/collections/<cid>/records/batch')
+def batch_edit(cid):
+    s=spec(cid); t=table_for(s); changes=request.get_json().get('changes',[])
+    if not isinstance(changes,list) or not 1<=len(changes)<=1000:
+        raise ValueError('Change between 1 and 1,000 records at a time')
+    ids=[int(p['_id']) for p in changes]
+    if len(set(ids))!=len(ids): raise ValueError('Duplicate record IDs')
+    with engine.begin() as conn:
+        for p in changes:
+            row=conn.execute(select(t).where(t.c._id==int(p['_id']))).mappings().first()
+            if not row or row['_rev']!=int(p.get('_rev',0)):
+                abort(409,'A record changed. Reload before applying this operation.')
+            clean=values({**dict(row),**p.get('values',{})},s)
+            r=conn.execute(update(t).where(t.c._id==row['_id'],t.c._rev==row['_rev']).values(**clean,_rev=row['_rev']+1))
+            if not r.rowcount: abort(409,'A record changed. Reload before applying this operation.')
+    return jsonify(ok=True)
+
+@app.put('/api/collections/<cid>/fields/<key>')
+def rename_field(cid,key):
+    s=spec(cid); p=request.get_json(); name=str(p.get('label','')).strip()
+    if not name or len(name)>120: raise ValueError('Field name must be 1–120 characters')
+    if any(f['label'].casefold()==name.casefold() and f['key']!=key for f in s['fields']):
+        raise ValueError('Field names must be unique')
+    field=next((f for f in s['fields'] if f['key']==key),None)
+    if not field: abort(404,'Field not found')
+    field['label']=name
+    with engine.begin() as conn:
+        conn.execute(update(collections).where(collections.c.id==cid).values(fields=json.dumps(s['fields'])))
+    return jsonify(ok=True)
+
+@app.put('/api/reports/<rid>')
+def update_report(rid):
+    with engine.connect() as conn:
+        old=conn.execute(select(reports).where(reports.c.id==rid)).mappings().first()
+    if not old: abort(404,'Report not found')
+    p=request.get_json(); name=str(p.get('name',old['name'])).strip()
+    if not 1<=len(name)<=120: raise ValueError('Report name must be 1–120 characters')
+    with engine.begin() as conn:
+        conn.execute(update(reports).where(reports.c.id==rid).values(name=name))
+    return jsonify(ok=True)
+
+@app.delete('/api/reports/<rid>')
+def delete_report(rid):
+    with engine.begin() as conn:
+        r=conn.execute(delete(reports).where(reports.c.id==rid))
+        if not r.rowcount: abort(404,'Report not found')
+    return jsonify(ok=True)
 
 if __name__=='__main__':
     init_db()

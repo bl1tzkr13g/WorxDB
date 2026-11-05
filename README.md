@@ -1,6 +1,6 @@
 # WorxDB
 
-A self-hosted, browser-based database workspace inspired by Microsoft Works Database. Docker runs the app and MariaDB together. This is an initial implementation, not a complete Works clone.
+A self-hosted, browser-based database workspace inspired by Microsoft Works Database, with a classic interface based on the supplied Works screenshots. Docker runs the app and MariaDB together. This is an initial implementation, not a complete Works clone.
 
 ## Included
 
@@ -55,8 +55,8 @@ Conversion runs on your own server. If the converter rejects your file, open it 
 ## Current limits
 
 - One shared administrator account; no individual users, roles or audit trail yet.
-- Database schemas are fixed after creation; export/reimport to change fields. No visual form designer, relationships or joins yet.
-- Reports can be created and printed; editing/deleting saved report definitions is not yet exposed.
+- Existing field names can be renamed. Adding/deleting fields or changing their SQL types requires export/reimport. Form Design supports ordering and showing/hiding fields in a two-column layout; free-positioned forms, relationships and joins are not implemented.
+- Reports can be created, renamed, duplicated, deleted and printed. Editing an existing report layout is not yet exposed; create a new definition to change the layout.
 - Formulas support basic arithmetic only, not the full Works formula language. They are computed on read, not stored as generated MariaDB columns.
 - Report layout is a tabular/grouped template. Exact Works layouts, mailing labels, mail merge, embedded images, charts, scripts and macros are not implemented.
 - Search, filtering and sorting currently load the selected database into app memory. This version targets small Works-sized datasets, not large SQL administration workloads.
@@ -87,6 +87,7 @@ docker compose up -d --build
 pip install -r requirements.txt
 python -m unittest discover -s tests -v
 node --check static/app.js
+node --check static/classic.js
 ```
 
 The unit suite runs against SQLite and covers record operations, imports, validation, typed sorting/filtering, formulas, concurrency checks, report rendering and escaping, authentication and CSRF. WDB unit tests mock the converter; they do **not** prove real-file compatibility.
@@ -94,3 +95,27 @@ The unit suite runs against SQLite and covers record operations, imports, valida
 GitHub Actions also builds the Docker image and exercises record operations, calculations, reports and exports against **real MariaDB** using `scripts/docker_smoke.py`. This is separate from validating your actual WDB file. See the Actions run for the current Docker integration result.
 
 This project is independent software and is not affiliated with Microsoft.
+
+
+## Classic Works-style interface
+
+The screenshot-based desktop shell includes **File, Edit, View, Record, Format, Tools and Help** menus, a compact icon toolbar, font/size selectors, cell value/formula bar and record status bar.
+
+| Area | Working commands |
+| --- | --- |
+| File | New, Open/import, Close, Save settings, Save As CSV, Page Setup, Print Preview, Print |
+| Edit | Grid/batch Undo, cell Cut/Copy/Paste/Clear, visual selection, Find, Replace, Go To, Fill Right/Down/Series |
+| View | List, Form, Form Design, Report, toolbar/task pane/gridline visibility, headers/footers, zoom |
+| Record | Insert/delete records, sort, mark/unmark, show marked/unmarked, hide records, filter |
+| Format | Rename field, display format, alignment, font/style, borders, shading, workspace edit protection, record height, field width |
+| Tools | Filters, ReportCreator, rename/delete/duplicate report, Options |
+
+**Unavailable commands remain visible and disabled with tooltips:** Send/email, Insert/Delete Field, Split, manual page breaks, Spelling, Mail Merge, automatic field defaults and Serialized formatting. This is not full Works feature parity.
+
+Display formats include General, Text, Number, Currency (USD), Percent, Exponential, Leading zeros, Fraction and True/False. Date/Time display uses the stored value; locale-specific date/time masks are not implemented. Formatting never changes SQL field types. Settings persist per database and are shared between users of the single workspace account. Workspace field protection is an editing preference, not authorization; it does not prevent API access.
+
+**Selection and batch scope:** clicking a cell selects it; its raw value appears in the value bar. Press Enter or click the checkmark to save. Calculated fields show their formula and are read-only. Double-click a cell to open the record form. Check record boxes before using Replace, Fill Down or Fill Series. These operations affect marked records **on the currently loaded page** only. Fill Right targets later editable fields in the selected record, with confirmation. Edit → Undo reverses the last grid/batch change in this browser session; it does not undo record insertion/deletion, modal form saves, formatting, or schema renames.
+
+Marks and hidden records are persistent workspace view settings, and do not constrain CSV exports or saved reports. Use server-side search/filter rules for those. List print preview prints the visible current page; use Reports for full database printing. Browser printing can override page settings. Browser/system keyboard shortcuts may reserve Ctrl+N, Ctrl+O and similar combinations; menus remain available. Clipboard integration may require HTTPS; the internal clipboard supports copying/pasting within WorxDB.
+
+No personal record contents, source filenames or field-value text from screenshots have been included in the interface or sample databases.
